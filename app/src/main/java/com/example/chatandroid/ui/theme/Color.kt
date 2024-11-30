@@ -1,4 +1,4 @@
-package com.example.piesockettest.ui.theme
+package com.example.chatandroid.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

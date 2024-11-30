@@ -19,5 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PiesocketTest"
+rootProject.name = "ChatAndroid"
 include(":app")
+ 

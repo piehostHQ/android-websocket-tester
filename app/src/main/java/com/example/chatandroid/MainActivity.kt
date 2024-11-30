@@ -1,10 +1,9 @@
-package com.example.piesockettest
+package com.example.piesockettester
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -16,95 +15,104 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okio.ByteString
+import com.piesocket.channels.Channel
+import com.piesocket.channels.PieSocket
+import com.piesocket.channels.misc.PieSocketEvent
+import com.piesocket.channels.misc.PieSocketEventListener
+import com.piesocket.channels.misc.PieSocketOptions
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
-    private var webSocket: WebSocket? = null
+    private var piesocket: PieSocket? = null
+    private var channel: Channel? = null
     private var isConnected by mutableStateOf(false)
     private var receivedMessage by mutableStateOf("")
     private var sentMessages = mutableStateListOf<String>()
+    private var errorMessage by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MyApp(
-                connectToApiTest = { url -> connectToWebSocket(url) },
+            WebSocketTesterApp(
+                connectToPieSocket = { apiKey, channelName -> connectToPieSocket(apiKey, channelName) },
                 sendMessage = { message -> sendMessage(message) },
                 isConnected = { isConnected },
                 receivedMessage = { receivedMessage },
-                sentMessages = { sentMessages }
-
+                sentMessages = { sentMessages },
+                errorMessage = { errorMessage }
             )
         }
     }
 
-    private fun connectToWebSocket(url: String) {
-        if (webSocket != null) {
-            webSocket?.close(1000, "Reconnecting to new WebSocket")
+    private fun connectToPieSocket(apiKey: String, channelName: String) {
+        if (apiKey.isBlank() || channelName.isBlank()) {
+            errorMessage = "API Key or Channel Name cannot be empty"
+            return
         }
 
-        val client = OkHttpClient()
-        val request = Request.Builder().url(url).build()
-        val listener = EchoWebSocketListener(
-            onOpen = { onConnectionOpened() },
-            onMessageReceived = { message -> onMessageReceived(message) }
-        )
-        webSocket = client.newWebSocket(request, listener)
-        client.dispatcher.executorService.shutdown()
-    }
+        // Configure PieSocket options
+        val options = PieSocketOptions().apply {
+            this.apiKey = apiKey
+        }
 
-    private fun onConnectionOpened() {
-        isConnected = true
+        piesocket = PieSocket(options)
+        channel = piesocket?.join(channelName) // Connect to the specified channel
+
+        // Handle connection events
+        channel?.listen("system:connected", object : PieSocketEventListener() {
+            override fun handleEvent(event: PieSocketEvent) {
+                isConnected = true
+                receivedMessage = "Connected to PieSocket channel"
+                errorMessage = "" // Clear any previous errors
+            }
+        })
+
+        // Handle messages
+        channel?.listen("message", object : PieSocketEventListener() {
+            override fun handleEvent(event: PieSocketEvent) {
+                val message = event.data?.toString() ?: ""
+                receivedMessage = "Received: $message"
+            }
+        })
+
+        // Handle errors
+        channel?.listen("system:error", object : PieSocketEventListener() {
+            override fun handleEvent(event: PieSocketEvent) {
+                receivedMessage = "Error: ${event.data?.toString()}"
+            }
+        })
     }
 
     private fun sendMessage(message: String) {
         if (isConnected) {
-            webSocket?.send(message)
+            val event = PieSocketEvent("message").apply {
+                data = message
+            }
+            channel?.publish(event)
             sentMessages.add("Sent: $message")
+        } else {
+            errorMessage = "Not connected to the WebSocket"
         }
-    }
-
-    private fun onMessageReceived(message: String) {
-        receivedMessage = message
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        webSocket?.close(1000, "Activity destroyed")
-    }
-
-    private class EchoWebSocketListener(
-        private val onOpen: () -> Unit,
-        private val onMessageReceived: (String) -> Unit
-    ) : WebSocketListener() {
-        override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
-            onOpen()
-        }
-
-        override fun onMessage(webSocket: WebSocket, text: String) {
-            onMessageReceived(text)
-        }
-
-        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            onMessageReceived(bytes.utf8())
-        }
+        channel?.disconnect()
     }
 }
 
 @Composable
-fun MyApp(
-    connectToApiTest: (String) -> Unit,
+fun WebSocketTesterApp(
+    connectToPieSocket: (String, String) -> Unit,
     sendMessage: (String) -> Unit,
     isConnected: () -> Boolean,
     receivedMessage: () -> String,
-    sentMessages: () -> List<String>
+    sentMessages: () -> List<String>,
+    errorMessage: () -> String
 ) {
     var message by remember { mutableStateOf("") }
-    var apiTest by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var channelName by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("") }
 
     Column(
@@ -115,7 +123,7 @@ fun MyApp(
         verticalArrangement = Arrangement.Top
     ) {
         Text(
-            text = "WebSocket Tester",
+            text = "PieSocket WebSocket Tester",
             style = MaterialTheme.typography.headlineLarge,
             modifier = Modifier.padding(bottom = 16.dp),
             fontSize = 24.sp
@@ -138,28 +146,48 @@ fun MyApp(
             )
         }
 
-        // Input field for WebSocket URL
+        // Display error message
+        if (errorMessage().isNotEmpty()) {
+            Text(
+                text = errorMessage(),
+                color = Color.Red,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+
+        // Input fields for API Key and Channel Name
         TextField(
-            value = apiTest,
-            onValueChange = { apiTest = it },
-            label = { Text("API Test (WebSocket URL)") },
+            value = apiKey,
+            onValueChange = { apiKey = it },
+            label = { Text("API Key") },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
         )
+
+        TextField(
+            value = channelName,
+            onValueChange = { channelName = it },
+            label = { Text("Channel Name") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        )
+
         Button(
             onClick = {
-                connectToApiTest(apiTest)
-                response = "Connecting to $apiTest"
+                connectToPieSocket(apiKey, channelName)
+                response = "Connecting to PieSocket: $channelName"
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Connect to API Test")
+            Text("Connect to PieSocket")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Input field for message and send button in row
+        // Input field for message and send button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,6 +237,7 @@ fun MyApp(
                     fontSize = 16.sp
                 )
             }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -223,7 +252,6 @@ fun MyApp(
                             .background(Color.White)
                             .padding(vertical = 4.dp),
                         shape = RoundedCornerShape(8.dp),
-
                     ) {
                         Text(
                             text = msg,
@@ -236,20 +264,18 @@ fun MyApp(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-
-
-        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
-    MyApp(
-        connectToApiTest = {},
+    WebSocketTesterApp(
+        connectToPieSocket = { _, _ -> },
         sendMessage = {},
         isConnected = { false },
         receivedMessage = { "" },
-        sentMessages = { emptyList() }
+        sentMessages = { emptyList() },
+        errorMessage = { "" }
     )
 }

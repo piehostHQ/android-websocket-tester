@@ -1,4 +1,4 @@
-package com.example.piesockettest
+package com.example.chatandroid
 
 import org.junit.Test
 

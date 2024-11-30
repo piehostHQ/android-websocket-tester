@@ -4,12 +4,12 @@ plugins {
 }
 
 android {
-    namespace = "com.example.piesockettest"
+    namespace = "com.example.chatandroid"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.piesockettest"
-        minSdk = 24
+        applicationId = "com.example.chatandroid"
+        minSdk = 27
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -29,6 +29,7 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -50,7 +51,9 @@ android {
 }
 
 dependencies {
+    implementation("com.piesocket:channels-sdk:1.0.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation ("com.google.android.material:material:1.12.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -66,4 +69,7 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+
+
 }
